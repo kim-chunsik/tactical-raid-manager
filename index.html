@@ -454,7 +454,7 @@
                     
                     availableSquads.sort((sqA, sqB) => sqA.bufferSum > sqB.bufferSum ? 1 : -1);
                     
-                    let targetSq = availableSquads;
+                    let targetSq = availableSquads[0];
                     if (targetSq) {
                         targetSq.buffers.push(b);
                         targetSq.roster.add(b.advName);
@@ -474,7 +474,7 @@
                     
                     availableSquads.sort((sqA, sqB) => sqA.dealerSum > sqB.dealerSum ? 1 : -1);
                     
-                    let targetSq = availableSquads;
+                    let targetSq = availableSquads[0];
                     if (targetSq) {
                         targetSq.dealers.push(d);
                         targetSq.roster.add(d.advName);
@@ -504,7 +504,7 @@
                             return sumA > sumB ? 1 : -1;
                         });
                         
-                        let targetParty = availableParties;
+                        let targetParty = availableParties[0];
                         if (targetParty) {
                             targetParty.dealers.push(d);
                         }
