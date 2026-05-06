@@ -395,47 +395,52 @@
         }
 
         // ==========================================
-        // 🌟 진(眞) 마스터피스: 완벽 방어형 다배럭 자동 편성
+        // 🌟 철벽 방어형 무한 기수 자동 편성 (모든 에러 원천 차단)
         // ==========================================
         function executeAutoFormation() {
             try {
-                const mode = parseInt(document.getElementById('raidMode').value);
+                const mode = parseInt(document.getElementById('raidMode').value) || 12;
                 const partiesPerSquad = mode / 4; 
 
-                // 1. 참석자 유무 가장 먼저 검사 (알림 표시 후 즉시 종료)
+                // 1. 공대원 데이터 유무 확인
+                if (!globalMembers || globalMembers.length === 0) {
+                    alert("공대원 데이터가 없습니다."); return;
+                }
+
+                // 2. 참석자 유무 확인
                 const attendees = globalMembers.filter(m => m.attendance === '참석');
                 if (attendees.length === 0) {
-                    alert("참석으로 표시된 인원이 없습니다.\n공대원 관리나 불참자 확인 탭에서 [참석]으로 설정해주세요."); 
-                    return;
+                    alert("참석으로 표시된 인원이 없습니다."); return;
                 }
 
                 const effectiveDealers = attendees.filter(m => m.role === '딜러' || (m.role === '버퍼' && m.isPassenger));
                 const effectiveBuffers = attendees.filter(m => m.role === '버퍼' && !m.isPassenger);
 
-                // 2. 최대 다배럭 유저 기준 기수 계산
+                // 3. 다배럭 기준 최소 필요 기수 계산
                 const advCounts = {};
                 attendees.forEach(m => { advCounts[m.advName] = (advCounts[m.advName] || 0) + 1; });
                 const advCountList = Object.values(advCounts);
-                const maxCharsPerAdv = advCountList.length > 0 ? Math.max(...advCountList) : 0;
+                const maxCharsPerAdv = advCountList.length > 0 ? Math.max(...advCountList) : 1;
 
-                // 3. 필요 기수 계산
-                const squadsNeededForDealers = Math.ceil(effectiveDealers.length / (partiesPerSquad * 3));
-                const squadsNeededForBuffers = Math.ceil(effectiveBuffers.length / partiesPerSquad);
+                const squadsNeededForDealers = Math.ceil(effectiveDealers.length / (partiesPerSquad * 3)) || 1;
+                const squadsNeededForBuffers = Math.ceil(effectiveBuffers.length / partiesPerSquad) || 1;
                 
-                // 최종 기수 산정
                 const totalSquads = Math.max(1, maxCharsPerAdv, squadsNeededForDealers, squadsNeededForBuffers);
 
-                // 기수 뼈대 생성
-                const squads = Array.from({length: totalSquads}, (_, i) => ({
-                    id: i, 
-                    capacity: partiesPerSquad * 3, 
-                    bufferCapacity: partiesPerSquad, 
-                    dealers: [], 
-                    buffers: [], 
-                    roster: new Set(), 
-                    dealerSum: 0n, 
-                    bufferSum: 0n
-                }));
+                // 4. 기수(Squad) 뼈대 완벽 생성 (오류 방지를 위해 하드코딩 배열 밀어넣기)
+                const squads = [];
+                for (let i = 0; i < totalSquads; i++) {
+                    squads.push({
+                        id: i, 
+                        capacity: partiesPerSquad * 3, 
+                        bufferCapacity: partiesPerSquad, 
+                        dealers: [], 
+                        buffers: [], 
+                        roster: new Set(), 
+                        dealerSum: 0n, 
+                        bufferSum: 0n
+                    });
+                }
 
                 // [1단계] 버퍼 배정
                 effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
@@ -450,11 +455,14 @@
                     
                     availableSquads.sort((sqA, sqB) => sqA.bufferSum > sqB.bufferSum ? 1 : -1);
                     
-                    // 철벽 방어 (undefined 방지)
-                    if (availableSquads.length > 0 && availableSquads) {
-                        availableSquads.buffers.push(b);
-                        availableSquads.roster.add(b.advName);
-                        availableSquads.bufferSum += parseScore(b.buff);
+                    // 빈 배열(undefined) 에러 완전 차단 방어 코드
+                    let targetSq = availableSquads;
+                    if (targetSq) {
+                        if (!targetSq.buffers) targetSq.buffers = [];
+                        targetSq.buffers.push(b);
+                        if (!targetSq.roster) targetSq.roster = new Set();
+                        targetSq.roster.add(b.advName);
+                        targetSq.bufferSum += parseScore(b.buff);
                     }
                 }
 
@@ -471,25 +479,32 @@
                     
                     availableSquads.sort((sqA, sqB) => sqA.dealerSum > sqB.dealerSum ? 1 : -1);
                     
-                    // 철벽 방어 (undefined 방지)
-                    if (availableSquads.length > 0 && availableSquads) {
-                        availableSquads.dealers.push(d);
-                        availableSquads.roster.add(d.advName);
-                        availableSquads.dealerSum += parseScore(d.damage);
+                    // 빈 배열(undefined) 에러 완전 차단 방어 코드
+                    let targetSq = availableSquads;
+                    if (targetSq) {
+                        if (!targetSq.dealers) targetSq.dealers = [];
+                        targetSq.dealers.push(d);
+                        if (!targetSq.roster) targetSq.roster = new Set();
+                        targetSq.roster.add(d.advName);
+                        targetSq.dealerSum += parseScore(d.damage);
                     }
                 }
 
-                // [3단계] 기수별 파티 세부 배정
+                // [3단계] 기수별 파티 배정
                 const parties = [];
                 squads.forEach(sq => {
-                    const sqParties = Array.from({length: partiesPerSquad}, (_, i) => ({
-                        squadId: sq.id,
-                        partyIndex: i,
-                        dealers: [],
-                        buffer: null,
-                        avgDmg: 0n
-                    }));
+                    const sqParties = [];
+                    for (let i = 0; i < partiesPerSquad; i++) {
+                        sqParties.push({
+                            squadId: sq.id,
+                            partyIndex: i,
+                            dealers: [],
+                            buffer: null,
+                            avgDmg: 0n
+                        });
+                    }
 
+                    if (!sq.dealers) sq.dealers = [];
                     sq.dealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                     for (const d of sq.dealers) {
                         let availableParties = sqParties.filter(p => p.dealers.length < 3);
@@ -499,17 +514,20 @@
                             return sumA > sumB ? 1 : -1;
                         });
                         
-                        // 철벽 방어
-                        if (availableParties.length > 0 && availableParties) {
-                            availableParties.dealers.push(d);
+                        let targetParty = availableParties;
+                        if (targetParty) {
+                            if (!targetParty.dealers) targetParty.dealers = [];
+                            targetParty.dealers.push(d);
                         }
                     }
 
                     sqParties.forEach(p => {
+                        if (!p.dealers) p.dealers = [];
                         const sumDmg = p.dealers.reduce((acc, dlr) => acc + parseScore(dlr.damage), 0n);
                         p.avgDmg = sumDmg / 3n; 
                     });
 
+                    if (!sq.buffers) sq.buffers = [];
                     sq.buffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                     sqParties.sort((pA, pB) => pA.avgDmg > pB.avgDmg ? 1 : -1);
 
@@ -518,13 +536,17 @@
                     }
 
                     sqParties.sort((pA, pB) => pA.partyIndex > pB.partyIndex ? 1 : -1);
-                    parties.push(...sqParties);
+                    
+                    // 파티 배열 합치기 안전 방식 적용
+                    for(let i=0; i<sqParties.length; i++){
+                        parties.push(sqParties[i]);
+                    }
                 });
 
                 renderFormationUI(squads, parties, mode);
             } catch (err) {
                 console.error("자동 편성 중 치명적 에러 발생:", err);
-                alert("자동 편성 도중 오류가 발생했습니다!\n에러 내용: " + err.message + "\n\n(참고: 브라우저 캐시 문제일 수 있으니 Ctrl + Shift + R 을 눌러 강력 새로고침을 해주세요)");
+                alert("자동 편성 도중 오류가 발생했습니다!\n에러 내용: " + err.message);
             }
         }
 
