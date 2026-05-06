@@ -271,7 +271,6 @@
             if(tab === 'absence') renderAbsence(); 
         }
 
-        // 완벽하게 BigInt를 걷어낸 숫자 포맷팅 함수
         function formatScore(numStr, role, isSummary = false) {
             if (!numStr || numStr === "-") return "-";
             const clean = numStr.toString().replace(/,/g, '');
@@ -292,7 +291,6 @@
             return `${uk}억 ${man > 0 ? man + '만' : ''}`;
         }
 
-        // 완벽하게 BigInt를 걷어낸 점수 파싱 함수
         function parseScore(val) {
             if (!val || val === "-" || val === "" || val === undefined) return 0;
             const clean = val.toString().replace(/,/g, '');
@@ -399,7 +397,7 @@
         }
 
         // ==========================================
-        // 🌟 철벽 방어형 무한 기수 자동 편성 (일반 Number 계산으로 에러 원천 차단)
+        // 🌟 철벽 방어형 무한 기수 자동 편성 (압축 편성 최적화 적용)
         // ==========================================
         function executeAutoFormation() {
             try {
@@ -442,6 +440,7 @@
                     });
                 }
 
+                // 1. 버퍼 배정: 강한 순서대로 정렬 후, 앞 기수(ID 오름차순)부터 꽉 채움
                 effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                 for (const b of effectiveBuffers) {
                     let availableSquads = squads.filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
@@ -452,7 +451,8 @@
                         availableSquads = [newSq];
                     }
                     
-                    availableSquads.sort((sqA, sqB) => sqA.bufferSum > sqB.bufferSum ? 1 : -1);
+                    // 핵심 수정: 점수 균등 분배 대신 'ID가 작은 앞 기수'를 우선적으로 채워 파티를 완성시킵니다.
+                    availableSquads.sort((sqA, sqB) => sqA.id - sqB.id);
                     
                     let targetSq = availableSquads[0];
                     if (targetSq) {
@@ -462,6 +462,7 @@
                     }
                 }
 
+                // 2. 딜러 배정: 강한 순서대로 정렬 후, 앞 기수(ID 오름차순)부터 꽉 채움
                 effectiveDealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                 for (const d of effectiveDealers) {
                     let availableSquads = squads.filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
@@ -472,7 +473,8 @@
                         availableSquads = [newSq];
                     }
                     
-                    availableSquads.sort((sqA, sqB) => sqA.dealerSum > sqB.dealerSum ? 1 : -1);
+                    // 핵심 수정: 파편화를 막기 위해 무조건 앞 번호 기수부터 빈자리를 꽉 채워나갑니다.
+                    availableSquads.sort((sqA, sqB) => sqA.id - sqB.id);
                     
                     let targetSq = availableSquads[0];
                     if (targetSq) {
