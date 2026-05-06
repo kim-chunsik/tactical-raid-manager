@@ -271,29 +271,33 @@
             if(tab === 'absence') renderAbsence(); 
         }
 
+        // 완벽하게 BigInt를 걷어낸 숫자 포맷팅 함수
         function formatScore(numStr, role, isSummary = false) {
             if (!numStr || numStr === "-") return "-";
-            const clean = numStr.replace(/,/g, '');
+            const clean = numStr.toString().replace(/,/g, '');
             if (isNaN(clean)) return numStr;
-            const n = BigInt(clean);
-            if (role === '버퍼') return Number(n).toLocaleString();
-            const jo = n / 1000000000000n;
-            const remainAfterJo = n % 1000000000000n;
-            const uk = remainAfterJo / 100000000n;
+            const n = Number(clean);
+            if (role === '버퍼') return n.toLocaleString();
+            
+            const jo = Math.floor(n / 1000000000000);
+            const remainAfterJo = n % 1000000000000;
+            const uk = Math.floor(remainAfterJo / 100000000);
+            
             if (isSummary) {
-                if (jo > 0n) return `${jo}조 ${uk > 0n ? uk + '억' : ''}`;
+                if (jo > 0) return `${jo}조 ${uk > 0 ? uk + '억' : ''}`;
                 return `${uk}억`;
             }
-            const man = (remainAfterJo % 100000000n) / 10000n;
-            if (jo > 0n) return `${jo}조 ${uk > 0n ? uk + '억' : ''}`;
-            return `${uk}억 ${man > 0n ? man + '만' : ''}`;
+            const man = Math.floor((remainAfterJo % 100000000) / 10000);
+            if (jo > 0) return `${jo}조 ${uk > 0 ? uk + '억' : ''}`;
+            return `${uk}억 ${man > 0 ? man + '만' : ''}`;
         }
 
+        // 완벽하게 BigInt를 걷어낸 점수 파싱 함수
         function parseScore(val) {
-            if (!val || val === "-" || val === "" || val === undefined) return 0n;
+            if (!val || val === "-" || val === "" || val === undefined) return 0;
             const clean = val.toString().replace(/,/g, '');
-            if (isNaN(clean) || clean.trim() === '') return 0n;
-            return BigInt(clean);
+            if (isNaN(clean) || clean.trim() === '') return 0;
+            return Number(clean);
         }
 
         async function loadMembers() {
@@ -313,18 +317,18 @@
             const dealers = data.filter(m => m.role === '딜러');
             const buffers = data.filter(m => m.role === '버퍼');
             
-            let validDmgCount = 0n, totalDmg = 0n; 
-            dealers.forEach(m => { totalDmg += parseScore(m.damage); validDmgCount += 1n; });
+            let validDmgCount = 0, totalDmg = 0; 
+            dealers.forEach(m => { totalDmg += parseScore(m.damage); validDmgCount += 1; });
             
-            let validBuffCount = 0n, totalBuff = 0n; 
-            buffers.forEach(m => { totalBuff += parseScore(m.buff); validBuffCount += 1n; });
+            let validBuffCount = 0, totalBuff = 0; 
+            buffers.forEach(m => { totalBuff += parseScore(m.buff); validBuffCount += 1; });
             
             document.getElementById('sum-advs').innerText = advs.size;
             document.getElementById('sum-chars').innerText = data.length;
             document.getElementById('sum-dealers').innerText = dealers.length;
             document.getElementById('sum-buffers').innerText = buffers.length;
-            document.getElementById('sum-avg-dmg').innerText = formatScore((validDmgCount > 0n ? totalDmg / validDmgCount : 0n).toString(), '딜러', true);
-            document.getElementById('sum-avg-buff').innerText = Number(validBuffCount > 0n ? totalBuff / validBuffCount : 0n).toLocaleString();
+            document.getElementById('sum-avg-dmg').innerText = formatScore((validDmgCount > 0 ? totalDmg / validDmgCount : 0).toString(), '딜러', true);
+            document.getElementById('sum-avg-buff').innerText = Math.floor(validBuffCount > 0 ? totalBuff / validBuffCount : 0).toLocaleString();
             
             const fAdv = document.getElementById('filterAdv');
             const sel = fAdv.value;
@@ -395,7 +399,7 @@
         }
 
         // ==========================================
-        // 🌟 철벽 방어형 무한 기수 자동 편성 (타입 에러 완벽 해결본)
+        // 🌟 철벽 방어형 무한 기수 자동 편성 (일반 Number 계산으로 에러 원천 차단)
         // ==========================================
         function executeAutoFormation() {
             try {
@@ -433,8 +437,8 @@
                         dealers: [], 
                         buffers: [], 
                         roster: new Set(), 
-                        dealerSum: 0n, 
-                        bufferSum: 0n
+                        dealerSum: 0, 
+                        bufferSum: 0
                     });
                 }
 
@@ -443,7 +447,7 @@
                     let availableSquads = squads.filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
                     
                     if (availableSquads.length === 0) {
-                        const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0n, bufferSum: 0n };
+                        const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
                         squads.push(newSq);
                         availableSquads = [newSq];
                     }
@@ -452,9 +456,7 @@
                     
                     let targetSq = availableSquads;
                     if (targetSq) {
-                        if (!targetSq.buffers) targetSq.buffers = [];
                         targetSq.buffers.push(b);
-                        if (!targetSq.roster) targetSq.roster = new Set();
                         targetSq.roster.add(b.advName);
                         targetSq.bufferSum += parseScore(b.buff);
                     }
@@ -465,7 +467,7 @@
                     let availableSquads = squads.filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
                     
                     if (availableSquads.length === 0) {
-                        const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0n, bufferSum: 0n };
+                        const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
                         squads.push(newSq);
                         availableSquads = [newSq];
                     }
@@ -474,9 +476,7 @@
                     
                     let targetSq = availableSquads;
                     if (targetSq) {
-                        if (!targetSq.dealers) targetSq.dealers = [];
                         targetSq.dealers.push(d);
-                        if (!targetSq.roster) targetSq.roster = new Set();
                         targetSq.roster.add(d.advName);
                         targetSq.dealerSum += parseScore(d.damage);
                     }
@@ -491,34 +491,30 @@
                             partyIndex: i,
                             dealers: [],
                             buffer: null,
-                            avgDmg: 0n
+                            avgDmg: 0
                         });
                     }
 
-                    if (!sq.dealers) sq.dealers = [];
                     sq.dealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                     for (const d of sq.dealers) {
                         let availableParties = sqParties.filter(p => p.dealers.length < 3);
                         availableParties.sort((pA, pB) => {
-                            let sumA = pA.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
-                            let sumB = pB.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
+                            let sumA = pA.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0);
+                            let sumB = pB.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0);
                             return sumA > sumB ? 1 : -1;
                         });
                         
                         let targetParty = availableParties;
                         if (targetParty) {
-                            if (!targetParty.dealers) targetParty.dealers = [];
                             targetParty.dealers.push(d);
                         }
                     }
 
                     sqParties.forEach(p => {
-                        if (!p.dealers) p.dealers = [];
-                        const sumDmg = p.dealers.reduce((acc, dlr) => acc + parseScore(dlr.damage), 0n);
-                        p.avgDmg = sumDmg / 3n; 
+                        const sumDmg = p.dealers.reduce((acc, dlr) => acc + parseScore(dlr.damage), 0);
+                        p.avgDmg = sumDmg / 3; 
                     });
 
-                    if (!sq.buffers) sq.buffers = [];
                     sq.buffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                     sqParties.sort((pA, pB) => pA.avgDmg > pB.avgDmg ? 1 : -1);
 
@@ -535,7 +531,7 @@
 
                 renderFormationUI(squads, parties, mode);
             } catch (err) {
-                console.error("자동 편성 중 치명적 에러 발생:", err);
+                console.error("자동 편성 중 에러 발생:", err);
                 alert("자동 편성 도중 오류가 발생했습니다!\n에러 내용: " + err.message);
             }
         }
@@ -551,16 +547,16 @@
                 const sqParties = parties.filter(p => p.squadId === sq.id);
                 if (sqParties.length === 0) return;
 
-                let totalDmgSum = 0n; 
-                let totalBuffSum = 0n; let validBuffCount = 0n;
+                let totalDmgSum = 0; 
+                let totalBuffSum = 0; let validBuffCount = 0;
                 
                 sqParties.forEach(p => {
                     p.dealers.forEach(d => { totalDmgSum += parseScore(d.damage); });
-                    if(p.buffer) { totalBuffSum += parseScore(p.buffer.buff); validBuffCount += 1n; }
+                    if(p.buffer) { totalBuffSum += parseScore(p.buffer.buff); validBuffCount += 1; }
                 });
 
-                const sqAvgDmg = sqParties.length > 0 ? totalDmgSum / BigInt(sqParties.length * 3) : 0n;
-                const sqAvgBuff = validBuffCount > 0n ? totalBuffSum / validBuffCount : 0n;
+                const sqAvgDmg = sqParties.length > 0 ? totalDmgSum / (sqParties.length * 3) : 0;
+                const sqAvgBuff = validBuffCount > 0 ? totalBuffSum / validBuffCount : 0;
 
                 let html = `
                 <div class="squad-card">
@@ -672,12 +668,12 @@
             if (globalMembers.length === 0) return;
             const advMap = {};
             globalMembers.forEach(m => {
-                if (!advMap[m.advName]) advMap[m.advName] = { name: m.advName, count: 0, totalDmg: 0n, totalBuff: 0n, dCount: 0n, bCount: 0n };
+                if (!advMap[m.advName]) advMap[m.advName] = { name: m.advName, count: 0, totalDmg: 0, totalBuff: 0, dCount: 0, bCount: 0 };
                 advMap[m.advName].count++;
-                if (m.role === '딜러') { advMap[m.advName].totalDmg += parseScore(m.damage); advMap[m.advName].dCount += 1n; } 
-                else { advMap[m.advName].totalBuff += parseScore(m.buff); advMap[m.advName].bCount += 1n; }
+                if (m.role === '딜러') { advMap[m.advName].totalDmg += parseScore(m.damage); advMap[m.advName].dCount += 1; } 
+                else { advMap[m.advName].totalBuff += parseScore(m.buff); advMap[m.advName].bCount += 1; }
             });
-            const advList = Object.values(advMap).map(a => ({ ...a, avgDmg: a.dCount > 0n ? a.totalDmg / a.dCount : 0n, avgBuff: a.bCount > 0n ? a.totalBuff / a.bCount : 0n })).sort((a, b) => a.avgDmg < b.avgDmg ? 1 : -1);
+            const advList = Object.values(advMap).map(a => ({ ...a, avgDmg: a.dCount > 0 ? a.totalDmg / a.dCount : 0, avgBuff: a.bCount > 0 ? a.totalBuff / a.bCount : 0 })).sort((a, b) => a.avgDmg < b.avgDmg ? 1 : -1);
             if(advList.length > 0) {
                 const strongest = advList; const weakest = advList[advList.length - 1];
                 document.getElementById('box-strongest').querySelector('.adv-name').innerText = strongest.name;
@@ -690,8 +686,8 @@
             const bLimit = globalMembers.filter(m=>m.role==='버퍼').sort((a,b)=>parseScore(a.buff)<parseScore(b.buff)?1:-1).slice(0, 10);
             const maxD = parseScore(dLimit?.damage || "1"); const maxB = parseScore(bLimit?.buff || "1");
             
-            document.getElementById('dealer-rank-list').innerHTML = dLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.damage,'딜러')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Number(parseScore(m.damage)*100n/(maxD || 1n))}%"></div></div></div></div>`).join('');
-            document.getElementById('buffer-rank-list').innerHTML = bLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.buff,'버퍼')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Number(parseScore(m.buff)*100n/(maxB || 1n))}%"></div></div></div></div>`).join('');
+            document.getElementById('dealer-rank-list').innerHTML = dLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.damage,'딜러')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${(parseScore(m.damage)*100/(maxD || 1))}%"></div></div></div></div>`).join('');
+            document.getElementById('buffer-rank-list').innerHTML = bLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.buff,'버퍼')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${(parseScore(m.buff)*100/(maxB || 1))}%"></div></div></div></div>`).join('');
 
             const jobMap = {}; globalMembers.forEach(m => jobMap[m.jobClass] = (jobMap[m.jobClass] || 0) + 1);
             const jobList = Object.entries(jobMap).sort((a, b) => b - a);
