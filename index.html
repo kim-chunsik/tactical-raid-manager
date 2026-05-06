@@ -395,21 +395,18 @@
         }
 
         // ==========================================
-        // 🌟 강화된 자동 편성 로직 (에러 감지 및 안전장치 추가)
+        // 🌟 진(眞) 마스터피스: 완벽 방어형 다배럭 자동 편성
         // ==========================================
         function executeAutoFormation() {
             try {
-                const mode = parseInt(document.getElementById('raidMode').value); // 12, 8, 4
+                const mode = parseInt(document.getElementById('raidMode').value);
                 const partiesPerSquad = mode / 4; 
 
-                // 1. 참석자 데이터 확인
-                if (!globalMembers || globalMembers.length === 0) {
-                    alert("로드된 공대원 데이터가 없습니다."); return;
-                }
-
+                // 1. 참석자 유무 가장 먼저 검사 (알림 표시 후 즉시 종료)
                 const attendees = globalMembers.filter(m => m.attendance === '참석');
                 if (attendees.length === 0) {
-                    alert("참석으로 표시된 인원이 없습니다."); return;
+                    alert("참석으로 표시된 인원이 없습니다.\n공대원 관리나 불참자 확인 탭에서 [참석]으로 설정해주세요."); 
+                    return;
                 }
 
                 const effectiveDealers = attendees.filter(m => m.role === '딜러' || (m.role === '버퍼' && m.isPassenger));
@@ -425,7 +422,7 @@
                 const squadsNeededForDealers = Math.ceil(effectiveDealers.length / (partiesPerSquad * 3));
                 const squadsNeededForBuffers = Math.ceil(effectiveBuffers.length / partiesPerSquad);
                 
-                // 최종 기수 (0이 되지 않도록 방어)
+                // 최종 기수 산정
                 const totalSquads = Math.max(1, maxCharsPerAdv, squadsNeededForDealers, squadsNeededForBuffers);
 
                 // 기수 뼈대 생성
@@ -444,30 +441,42 @@
                 effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                 for (const b of effectiveBuffers) {
                     let availableSquads = squads.filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
+                    
                     if (availableSquads.length === 0) {
                         const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0n, bufferSum: 0n };
                         squads.push(newSq);
                         availableSquads = [newSq];
                     }
+                    
                     availableSquads.sort((sqA, sqB) => sqA.bufferSum > sqB.bufferSum ? 1 : -1);
-                    availableSquads.buffers.push(b);
-                    availableSquads.roster.add(b.advName);
-                    availableSquads.bufferSum += parseScore(b.buff);
+                    
+                    // 철벽 방어 (undefined 방지)
+                    if (availableSquads.length > 0 && availableSquads) {
+                        availableSquads.buffers.push(b);
+                        availableSquads.roster.add(b.advName);
+                        availableSquads.bufferSum += parseScore(b.buff);
+                    }
                 }
 
                 // [2단계] 딜러 배정
                 effectiveDealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                 for (const d of effectiveDealers) {
                     let availableSquads = squads.filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
+                    
                     if (availableSquads.length === 0) {
                         const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0n, bufferSum: 0n };
                         squads.push(newSq);
                         availableSquads = [newSq];
                     }
+                    
                     availableSquads.sort((sqA, sqB) => sqA.dealerSum > sqB.dealerSum ? 1 : -1);
-                    availableSquads.dealers.push(d);
-                    availableSquads.roster.add(d.advName);
-                    availableSquads.dealerSum += parseScore(d.damage);
+                    
+                    // 철벽 방어 (undefined 방지)
+                    if (availableSquads.length > 0 && availableSquads) {
+                        availableSquads.dealers.push(d);
+                        availableSquads.roster.add(d.advName);
+                        availableSquads.dealerSum += parseScore(d.damage);
+                    }
                 }
 
                 // [3단계] 기수별 파티 세부 배정
@@ -489,7 +498,11 @@
                             let sumB = pB.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
                             return sumA > sumB ? 1 : -1;
                         });
-                        if (availableParties.length > 0) availableParties.dealers.push(d);
+                        
+                        // 철벽 방어
+                        if (availableParties.length > 0 && availableParties) {
+                            availableParties.dealers.push(d);
+                        }
                     }
 
                     sqParties.forEach(p => {
@@ -510,8 +523,8 @@
 
                 renderFormationUI(squads, parties, mode);
             } catch (err) {
-                console.error("자동 편성 중 치명적 에러:", err);
-                alert("자동 편성 도중 오류가 발생했습니다!\n에러 내용: " + err.message);
+                console.error("자동 편성 중 치명적 에러 발생:", err);
+                alert("자동 편성 도중 오류가 발생했습니다!\n에러 내용: " + err.message + "\n\n(참고: 브라우저 캐시 문제일 수 있으니 Ctrl + Shift + R 을 눌러 강력 새로고침을 해주세요)");
             }
         }
 
