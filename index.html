@@ -397,7 +397,7 @@
         }
 
         // ==========================================
-        // 🌟 철벽 방어형 무한 기수 자동 편성 (압축 편성 최적화 적용)
+        // 🌟 철벽 밸런싱형 압축 기수 자동 편성 (Windowed Allocation)
         // ==========================================
         function executeAutoFormation() {
             try {
@@ -416,22 +416,25 @@
                 const effectiveDealers = attendees.filter(m => m.role === '딜러' || (m.role === '버퍼' && m.isPassenger));
                 const effectiveBuffers = attendees.filter(m => m.role === '버퍼' && !m.isPassenger);
 
-                const advCounts = {};
-                attendees.forEach(m => { advCounts[m.advName] = (advCounts[m.advName] || 0) + 1; });
-                const advCountList = Object.values(advCounts);
-                const maxCharsPerAdv = advCountList.length > 0 ? Math.max(...advCountList) : 1;
+                const dealerCapacity = partiesPerSquad * 3;
+                const bufferCapacity = partiesPerSquad;
 
-                const squadsNeededForDealers = Math.ceil(effectiveDealers.length / (partiesPerSquad * 3)) || 1;
-                const squadsNeededForBuffers = Math.ceil(effectiveBuffers.length / partiesPerSquad) || 1;
-                
-                const totalSquads = Math.max(1, maxCharsPerAdv, squadsNeededForDealers, squadsNeededForBuffers);
+                // 1. 목표 기수(Full Window) 계산
+                // 딜러 수와 버퍼 수를 고려하여 '완전히 채울 수 있는 기수'를 설정합니다.
+                let targetDealerSquads = Math.floor(effectiveDealers.length / dealerCapacity);
+                if (targetDealerSquads < 1) targetDealerSquads = 1;
 
+                let targetBufferSquads = Math.floor(effectiveBuffers.length / bufferCapacity);
+                if (targetBufferSquads < 1) targetBufferSquads = 1;
+
+                // 초기 기수 세팅
+                const initialSquadCount = Math.max(targetDealerSquads, targetBufferSquads);
                 const squads = [];
-                for (let i = 0; i < totalSquads; i++) {
+                for (let i = 0; i < initialSquadCount; i++) {
                     squads.push({
                         id: i, 
-                        capacity: partiesPerSquad * 3, 
-                        bufferCapacity: partiesPerSquad, 
+                        capacity: dealerCapacity, 
+                        bufferCapacity: bufferCapacity, 
                         dealers: [], 
                         buffers: [], 
                         roster: new Set(), 
@@ -440,70 +443,94 @@
                     });
                 }
 
-                // 1. 버퍼 배정: 강한 순서대로 정렬 후, 앞 기수(ID 오름차순)부터 꽉 채움
+                // 2. 버퍼 밸런싱 분배
                 effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                 for (const b of effectiveBuffers) {
-                    let availableSquads = squads.filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
+                    let placed = false;
                     
-                    if (availableSquads.length === 0) {
-                        const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
-                        squads.push(newSq);
-                        availableSquads = [newSq];
+                    // 우선적으로 목표 기수(Full Window) 내에서 자리를 찾음
+                    let validFull = squads.slice(0, targetBufferSquads).filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
+                    
+                    if (validFull.length > 0) {
+                        // 현재 합산 버프력이 가장 낮은 기수에 우선 배정 (밸런스 맞춤)
+                        validFull.sort((sqA, sqB) => sqA.bufferSum - sqB.bufferSum);
+                        let targetSq = validFull[0];
+                        targetSq.buffers.push(b);
+                        targetSq.roster.add(b.advName);
+                        targetSq.bufferSum += parseScore(b.buff);
+                        placed = true;
                     }
-                    
-                    // 핵심 수정: 점수 균등 분배 대신 'ID가 작은 앞 기수'를 우선적으로 채워 파티를 완성시킵니다.
-                    availableSquads.sort((sqA, sqB) => sqA.id - sqB.id);
-                    
-                    let targetSq = availableSquads[0];
-                    if (targetSq) {
+
+                    // 목표 기수가 꽉 찼거나 모험단 제한에 걸리면 뒤(Overflow)로 넘김
+                    if (!placed) {
+                        let validOverflow = squads.slice(targetBufferSquads).filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
+                        
+                        if (validOverflow.length === 0) {
+                            const newSq = { id: squads.length, capacity: dealerCapacity, bufferCapacity: bufferCapacity, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
+                            squads.push(newSq);
+                            validOverflow = [newSq];
+                        }
+                        
+                        validOverflow.sort((sqA, sqB) => sqA.bufferSum - sqB.bufferSum);
+                        let targetSq = validOverflow[0];
                         targetSq.buffers.push(b);
                         targetSq.roster.add(b.advName);
                         targetSq.bufferSum += parseScore(b.buff);
                     }
                 }
 
-                // 2. 딜러 배정: 강한 순서대로 정렬 후, 앞 기수(ID 오름차순)부터 꽉 채움
+                // 3. 딜러 밸런싱 분배
                 effectiveDealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                 for (const d of effectiveDealers) {
-                    let availableSquads = squads.filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
+                    let placed = false;
                     
-                    if (availableSquads.length === 0) {
-                        const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
-                        squads.push(newSq);
-                        availableSquads = [newSq];
+                    // 우선적으로 목표 기수(Full Window) 내에서 자리를 찾음
+                    let validFull = squads.slice(0, targetDealerSquads).filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
+                    
+                    if (validFull.length > 0) {
+                        // 현재 합산 딜량이 가장 낮은 기수에 우선 배정 (밸런스 맞춤)
+                        validFull.sort((sqA, sqB) => sqA.dealerSum - sqB.dealerSum);
+                        let targetSq = validFull[0];
+                        targetSq.dealers.push(d);
+                        targetSq.roster.add(d.advName);
+                        targetSq.dealerSum += parseScore(d.damage);
+                        placed = true;
                     }
-                    
-                    // 핵심 수정: 파편화를 막기 위해 무조건 앞 번호 기수부터 빈자리를 꽉 채워나갑니다.
-                    availableSquads.sort((sqA, sqB) => sqA.id - sqB.id);
-                    
-                    let targetSq = availableSquads[0];
-                    if (targetSq) {
+
+                    // 목표 기수가 꽉 찼거나 모험단 제한에 걸리면 뒤(Overflow)로 넘김
+                    if (!placed) {
+                        let validOverflow = squads.slice(targetDealerSquads).filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
+                        
+                        if (validOverflow.length === 0) {
+                            const newSq = { id: squads.length, capacity: dealerCapacity, bufferCapacity: bufferCapacity, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
+                            squads.push(newSq);
+                            validOverflow = [newSq];
+                        }
+                        
+                        validOverflow.sort((sqA, sqB) => sqA.dealerSum - sqB.dealerSum);
+                        let targetSq = validOverflow[0];
                         targetSq.dealers.push(d);
                         targetSq.roster.add(d.advName);
                         targetSq.dealerSum += parseScore(d.damage);
                     }
                 }
 
+                // 4. 기수 내에서 파티 짜기 (레/옐/그 밸런싱)
                 const parties = [];
                 squads.forEach(sq => {
                     const sqParties = [];
                     for (let i = 0; i < partiesPerSquad; i++) {
-                        sqParties.push({
-                            squadId: sq.id,
-                            partyIndex: i,
-                            dealers: [],
-                            buffer: null,
-                            avgDmg: 0
-                        });
+                        sqParties.push({ squadId: sq.id, partyIndex: i, dealers: [], buffer: null, avgDmg: 0 });
                     }
 
+                    // 파티 밸런스를 맞추기 위해 파티 합산 딜량이 가장 낮은 곳에 딜러 배정
                     sq.dealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                     for (const d of sq.dealers) {
                         let availableParties = sqParties.filter(p => p.dealers.length < 3);
                         availableParties.sort((pA, pB) => {
                             let sumA = pA.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0);
                             let sumB = pB.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0);
-                            return sumA > sumB ? 1 : -1;
+                            return sumA - sumB; 
                         });
                         
                         let targetParty = availableParties[0];
@@ -517,6 +544,7 @@
                         p.avgDmg = sumDmg / 3; 
                     });
 
+                    // 평균 딜량이 높은 파티부터 강한 버퍼 배정
                     sq.buffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                     sqParties.sort((pA, pB) => pA.avgDmg > pB.avgDmg ? 1 : -1);
 
@@ -524,7 +552,7 @@
                         if (i < sqParties.length) sqParties[i].buffer = sq.buffers[i];
                     }
 
-                    sqParties.sort((pA, pB) => pA.partyIndex > pB.partyIndex ? 1 : -1);
+                    sqParties.sort((pA, pB) => pA.partyIndex - pB.partyIndex);
                     
                     for(let i=0; i<sqParties.length; i++){
                         parties.push(sqParties[i]);
