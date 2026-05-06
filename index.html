@@ -314,10 +314,10 @@
             const buffers = data.filter(m => m.role === '버퍼');
             
             let validDmgCount = 0n, totalDmg = 0n; 
-            dealers.forEach(m => { totalDmg += parseScore(m.damage); validDmgCount++; });
+            dealers.forEach(m => { totalDmg += parseScore(m.damage); validDmgCount += 1n; });
             
             let validBuffCount = 0n, totalBuff = 0n; 
-            buffers.forEach(m => { totalBuff += parseScore(m.buff); validBuffCount++; });
+            buffers.forEach(m => { totalBuff += parseScore(m.buff); validBuffCount += 1n; });
             
             document.getElementById('sum-advs').innerText = advs.size;
             document.getElementById('sum-chars').innerText = data.length;
@@ -395,19 +395,17 @@
         }
 
         // ==========================================
-        // 🌟 철벽 방어형 무한 기수 자동 편성 (모든 에러 원천 차단)
+        // 🌟 철벽 방어형 무한 기수 자동 편성 (타입 에러 완벽 해결본)
         // ==========================================
         function executeAutoFormation() {
             try {
                 const mode = parseInt(document.getElementById('raidMode').value) || 12;
                 const partiesPerSquad = mode / 4; 
 
-                // 1. 공대원 데이터 유무 확인
                 if (!globalMembers || globalMembers.length === 0) {
                     alert("공대원 데이터가 없습니다."); return;
                 }
 
-                // 2. 참석자 유무 확인
                 const attendees = globalMembers.filter(m => m.attendance === '참석');
                 if (attendees.length === 0) {
                     alert("참석으로 표시된 인원이 없습니다."); return;
@@ -416,7 +414,6 @@
                 const effectiveDealers = attendees.filter(m => m.role === '딜러' || (m.role === '버퍼' && m.isPassenger));
                 const effectiveBuffers = attendees.filter(m => m.role === '버퍼' && !m.isPassenger);
 
-                // 3. 다배럭 기준 최소 필요 기수 계산
                 const advCounts = {};
                 attendees.forEach(m => { advCounts[m.advName] = (advCounts[m.advName] || 0) + 1; });
                 const advCountList = Object.values(advCounts);
@@ -427,7 +424,6 @@
                 
                 const totalSquads = Math.max(1, maxCharsPerAdv, squadsNeededForDealers, squadsNeededForBuffers);
 
-                // 4. 기수(Squad) 뼈대 완벽 생성 (오류 방지를 위해 하드코딩 배열 밀어넣기)
                 const squads = [];
                 for (let i = 0; i < totalSquads; i++) {
                     squads.push({
@@ -442,7 +438,6 @@
                     });
                 }
 
-                // [1단계] 버퍼 배정
                 effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                 for (const b of effectiveBuffers) {
                     let availableSquads = squads.filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
@@ -455,7 +450,6 @@
                     
                     availableSquads.sort((sqA, sqB) => sqA.bufferSum > sqB.bufferSum ? 1 : -1);
                     
-                    // 빈 배열(undefined) 에러 완전 차단 방어 코드
                     let targetSq = availableSquads;
                     if (targetSq) {
                         if (!targetSq.buffers) targetSq.buffers = [];
@@ -466,7 +460,6 @@
                     }
                 }
 
-                // [2단계] 딜러 배정
                 effectiveDealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                 for (const d of effectiveDealers) {
                     let availableSquads = squads.filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
@@ -479,7 +472,6 @@
                     
                     availableSquads.sort((sqA, sqB) => sqA.dealerSum > sqB.dealerSum ? 1 : -1);
                     
-                    // 빈 배열(undefined) 에러 완전 차단 방어 코드
                     let targetSq = availableSquads;
                     if (targetSq) {
                         if (!targetSq.dealers) targetSq.dealers = [];
@@ -490,7 +482,6 @@
                     }
                 }
 
-                // [3단계] 기수별 파티 배정
                 const parties = [];
                 squads.forEach(sq => {
                     const sqParties = [];
@@ -537,7 +528,6 @@
 
                     sqParties.sort((pA, pB) => pA.partyIndex > pB.partyIndex ? 1 : -1);
                     
-                    // 파티 배열 합치기 안전 방식 적용
                     for(let i=0; i<sqParties.length; i++){
                         parties.push(sqParties[i]);
                     }
@@ -566,7 +556,7 @@
                 
                 sqParties.forEach(p => {
                     p.dealers.forEach(d => { totalDmgSum += parseScore(d.damage); });
-                    if(p.buffer) { totalBuffSum += parseScore(p.buffer.buff); validBuffCount++; }
+                    if(p.buffer) { totalBuffSum += parseScore(p.buffer.buff); validBuffCount += 1n; }
                 });
 
                 const sqAvgDmg = sqParties.length > 0 ? totalDmgSum / BigInt(sqParties.length * 3) : 0n;
@@ -684,8 +674,8 @@
             globalMembers.forEach(m => {
                 if (!advMap[m.advName]) advMap[m.advName] = { name: m.advName, count: 0, totalDmg: 0n, totalBuff: 0n, dCount: 0n, bCount: 0n };
                 advMap[m.advName].count++;
-                if (m.role === '딜러') { advMap[m.advName].totalDmg += parseScore(m.damage); advMap[m.advName].dCount++; } 
-                else { advMap[m.advName].totalBuff += parseScore(m.buff); advMap[m.advName].bCount++; }
+                if (m.role === '딜러') { advMap[m.advName].totalDmg += parseScore(m.damage); advMap[m.advName].dCount += 1n; } 
+                else { advMap[m.advName].totalBuff += parseScore(m.buff); advMap[m.advName].bCount += 1n; }
             });
             const advList = Object.values(advMap).map(a => ({ ...a, avgDmg: a.dCount > 0n ? a.totalDmg / a.dCount : 0n, avgBuff: a.bCount > 0n ? a.totalBuff / a.bCount : 0n })).sort((a, b) => a.avgDmg < b.avgDmg ? 1 : -1);
             if(advList.length > 0) {
