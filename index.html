@@ -127,7 +127,6 @@
         <div class="nav-tab" onclick="switchTab('stats')">통계</div>
     </div>
 
-    <!-- 1. 공대원 관리 탭 -->
     <div id="section-manage" class="content-section active">
         <div class="summary-grid six-cols">
             <div class="summary-card"><div class="summary-label">총 모험단</div><div class="summary-value" id="sum-advs">0</div></div>
@@ -180,7 +179,6 @@
         </div>
     </div>
 
-    <!-- 2. 자동 편성 탭 -->
     <div id="section-formation" class="content-section">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
             <h3 style="margin: 0; font-size: 20px; font-weight: 800; color: #111827;">편성 설정</h3>
@@ -199,7 +197,6 @@
         </div>
     </div>
 
-    <!-- 3. 불참자 확인 탭 -->
     <div id="section-absence" class="content-section">
         <div class="summary-grid" style="margin-bottom: 25px;">
             <div class="summary-card"><div class="summary-label">참석 모험단</div><div class="summary-value attend" id="abs-sum-adv-attend">0</div></div>
@@ -235,7 +232,6 @@
         </div>
     </div>
 
-    <!-- 4. 통계 탭 -->
     <div id="section-stats" class="content-section">
         <div class="stats-top-row">
             <div class="stat-box strong" id="box-strongest">
@@ -300,7 +296,6 @@
             return BigInt(clean);
         }
 
-        // 🌟 수정: 외부 API 호출 경로를 상대 경로로 변경 (웹 배포용)
         async function loadMembers() {
             const res = await fetch("/api/members");
             const d = await res.json();
@@ -397,6 +392,9 @@
             calculateSummary(globalMembers);
         }
 
+        // ==========================================
+        // 🌟 진(眞) 마스터피스: 중복 방지 무한 기수 확장형 스마트 저울 분배
+        // ==========================================
         function executeAutoFormation() {
             const mode = parseInt(document.getElementById('raidMode').value); // 12, 8, 4
             const partiesPerSquad = mode / 4; 
@@ -408,116 +406,116 @@
             if (attendees.length === 0) {
                 alert("참석 인원이 없습니다."); return;
             }
-            if (effectiveDealers.length !== effectiveBuffers.length * 3) {
-                alert(`비율이 맞지 않습니다!\n현재 딜러(업둥이 버퍼 포함): ${effectiveDealers.length}명, 유효 버퍼: ${effectiveBuffers.length}명\n(필요 딜러: ${effectiveBuffers.length * 3}명, 3딜 1벞 필수)`);
-                return;
-            }
 
-            const totalParties = effectiveBuffers.length;
-            const totalSquads = Math.ceil(totalParties / partiesPerSquad);
-            
-            const squadRosters = Array.from({length: totalSquads}, () => []);
+            // 1. 최대 다배럭 유저(모험단) 기준 최소 보장 기수 계산 (중복 방지 핵심)
+            const advCounts = {};
+            attendees.forEach(m => { advCounts[m.advName] = (advCounts[m.advName] || 0) + 1; });
+            const maxCharsPerAdv = Math.max(...Object.values(advCounts));
 
-            const parties = Array.from({length: totalParties}, (_, i) => ({
-                id: i, squadId: Math.floor(i / partiesPerSquad), partyIndex: i % partiesPerSquad, 
-                dealers: [], buffer: null, avgDmg: 0n
-            }));
+            // 2. 역할별 필요 기수 계산
+            const squadsNeededForDealers = Math.ceil(effectiveDealers.length / (partiesPerSquad * 3));
+            const squadsNeededForBuffers = Math.ceil(effectiveBuffers.length / partiesPerSquad);
 
+            // 🌟 3. 최종 기수 = 세 가지 조건 중 가장 큰 값 (절대 모험단 중복 안 나도록 빈자리 감수)
+            const totalSquads = Math.max(maxCharsPerAdv, squadsNeededForDealers, squadsNeededForBuffers);
+
+            // 기수(Squad) 뼈대 만들기
             const squads = Array.from({length: totalSquads}, (_, i) => ({
-                id: i, capacity: parties.filter(p => p.squadId === i).length * 3, bufferCapacity: parties.filter(p => p.squadId === i).length, dealers: [], buffers: []
+                id: i, 
+                capacity: partiesPerSquad * 3, 
+                bufferCapacity: partiesPerSquad, 
+                dealers: [], 
+                buffers: [], 
+                roster: new Set(), // 이 기수에 들어간 모험단명 저장 (중복 검사용)
+                dealerSum: 0n, 
+                bufferSum: 0n
             }));
 
+            // [1단계] 버퍼 배정 (강한 버퍼부터)
             effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
             for (const b of effectiveBuffers) {
-                let placed = false;
-                let availableSquads = squads.filter(sq => sq.buffers.length < sq.bufferCapacity);
-                for (let sq of availableSquads) {
-                    if (!squadRosters[sq.id].includes(b.advName)) {
-                        sq.buffers.push(b); squadRosters[sq.id].push(b.advName); placed = true; break;
-                    }
+                // 내 모험단이 없고, 버퍼 자리가 남은 기수들만 필터링
+                let availableSquads = squads.filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
+                
+                if (availableSquads.length === 0) {
+                    // 예외 방어코드 (이론상 안 생기지만 만약 겹치면 기수 무한 추가)
+                    const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0n, bufferSum: 0n };
+                    squads.push(newSq);
+                    availableSquads = [newSq];
                 }
-                if (!placed && availableSquads.length > 0) {
-                    let sq = availableSquads[0]; sq.buffers.push(b); squadRosters[sq.id].push(b.advName);
-                }
+                
+                // 배정 가능한 기수 중 버퍼 총합이 가장 약한 곳에 지원 (공평 분배)
+                availableSquads.sort((a, sqB) => a.bufferSum > sqB.bufferSum ? 1 : -1);
+                availableSquads.buffers.push(b);
+                availableSquads.roster.add(b.advName);
+                availableSquads.bufferSum += parseScore(b.buff);
             }
 
+            // [2단계] 딜러 배정 (강한 딜러부터)
             effectiveDealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
             for (const d of effectiveDealers) {
-                squads.sort((a, b) => {
-                    let sumA = a.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
-                    let sumB = b.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
-                    if (sumA !== sumB) return sumA > sumB ? 1 : -1;
-                    if (a.dealers.length !== b.dealers.length) return a.dealers.length - b.dealers.length;
-                    return a.id - b.id;
-                });
-
-                let placed = false;
-                let availableSquads = squads.filter(sq => sq.dealers.length < sq.capacity);
-                for (let sq of availableSquads) {
-                    if (!squadRosters[sq.id].includes(d.advName)) {
-                        sq.dealers.push(d); squadRosters[sq.id].push(d.advName); placed = true; break;
-                    }
+                // 내 모험단이 없고, 딜러 자리가 남은 기수들만 필터링
+                let availableSquads = squads.filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
+                
+                if (availableSquads.length === 0) {
+                    // 예외 방어코드 (기수 강제 추가)
+                    const newSq = { id: squads.length, capacity: partiesPerSquad * 3, bufferCapacity: partiesPerSquad, dealers: [], buffers: [], roster: new Set(), dealerSum: 0n, bufferSum: 0n };
+                    squads.push(newSq);
+                    availableSquads = [newSq];
                 }
-                if (!placed && availableSquads.length > 0) {
-                    let sq = availableSquads[0]; sq.dealers.push(d); squadRosters[sq.id].push(d.advName);
-                }
+                
+                // 배정 가능한 기수 중 딜러 총합이 가장 약한 곳에 지원 (공평 분배)
+                availableSquads.sort((a, sqB) => a.dealerSum > sqB.dealerSum ? 1 : -1);
+                availableSquads.dealers.push(d);
+                availableSquads.roster.add(d.advName);
+                availableSquads.dealerSum += parseScore(d.damage);
             }
+
+            // 기수 재정렬
             squads.sort((a, b) => a.id > b.id ? 1 : -1);
+            const parties = [];
 
+            // [3단계] 기수 내부 파티 분배
             squads.forEach(sq => {
+                // 각 기수당 최대 파티수만큼 파티 뼈대 생성
+                const sqParties = Array.from({length: partiesPerSquad}, (_, i) => ({
+                    squadId: sq.id,
+                    partyIndex: i,
+                    dealers: [],
+                    buffer: null,
+                    avgDmg: 0n
+                }));
+
+                // 딜러를 파티에 분배
                 sq.dealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
-                const myParties = parties.filter(p => p.squadId === sq.id);
-
                 for (const d of sq.dealers) {
-                    myParties.sort((a, b) => {
-                        let sumA = a.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
-                        let sumB = b.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
-                        if (sumA !== sumB) return sumA > sumB ? 1 : -1;
-                        if (a.dealers.length !== b.dealers.length) return a.dealers.length - b.dealers.length;
-                        return a.id - b.id;
+                    let availableParties = sqParties.filter(p => p.dealers.length < 3);
+                    availableParties.sort((pA, pB) => {
+                        let sumA = pA.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
+                        let sumB = pB.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0n);
+                        return sumA > sumB ? 1 : -1;
                     });
-
-                    let placed = false;
-                    for (let pty of myParties) {
-                        if (pty.dealers.length < 3 && !pty.dealers.some(x => x.advName === d.advName)) {
-                            pty.dealers.push(d); placed = true; break;
-                        }
-                    }
-                    if (!placed) {
-                        let fallback = myParties.find(pty => pty.dealers.length < 3);
-                        if (fallback) fallback.dealers.push(d);
-                    }
+                    if (availableParties.length > 0) availableParties.dealers.push(d);
                 }
 
-                myParties.forEach(p => {
+                // 파티 딜 평균 계산 (빈자리 상관없이 공팟 구인 스펙 가늠을 위해 무조건 3으로 나눔)
+                sqParties.forEach(p => {
                     const sumDmg = p.dealers.reduce((acc, dlr) => acc + parseScore(dlr.damage), 0n);
                     p.avgDmg = sumDmg / 3n; 
                 });
-            });
 
-            squads.forEach(sq => {
-                const myParties = parties.filter(p => p.squadId === sq.id);
-                myParties.sort((a, b) => a.avgDmg > b.avgDmg ? 1 : -1); 
-                sq.buffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1); 
+                // 버퍼를 파티에 분배 (약한 파티에 강한 버퍼)
+                sq.buffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
+                sqParties.sort((a, b) => a.avgDmg > b.avgDmg ? 1 : -1);
 
-                let unassignedBuffers = [...sq.buffers];
-
-                for (let pty of myParties) {
-                    let placedIdx = -1;
-                    for (let i = 0; i < unassignedBuffers.length; i++) {
-                        let b = unassignedBuffers[i];
-                        if (!pty.dealers.some(d => d.advName === b.advName)) {
-                            placedIdx = i; break;
-                        }
-                    }
-                    if (placedIdx === -1) placedIdx = 0;
-                    pty.buffer = unassignedBuffers[placedIdx];
-                    unassignedBuffers.splice(placedIdx, 1);
+                for (let i = 0; i < sq.buffers.length; i++) {
+                    if (i < sqParties.length) sqParties[i].buffer = sq.buffers[i];
                 }
-                myParties.sort((a, b) => a.partyIndex > b.partyIndex ? 1 : -1);
+
+                sqParties.sort((a, b) => a.partyIndex > b.partyIndex ? 1 : -1);
+                parties.push(...sqParties);
             });
 
-            parties.sort((a, b) => a.id > b.id ? 1 : -1);
             renderFormationUI(squads, parties, mode);
         }
 
@@ -546,11 +544,14 @@
                     <div class="squad-header">
                         <div class="squad-title">${i + 1}기수</div>
                         <div class="squad-summary">
-                            ${sqParties.length * 4}명 | 평균 딜점수 ${formatScore(sqAvgDmg.toString(), '딜러', true)} | 평균 버프점수 ${formatScore(sqAvgBuff.toString(), '버퍼')}
+                            총 ${sq.dealers.length + sq.buffers.length}명 | 예상 평균 딜점수 ${formatScore(sqAvgDmg.toString(), '딜러', true)} | 평균 버프점수 ${formatScore(sqAvgBuff.toString(), '버퍼')}
                         </div>
                     </div>`;
 
                 sqParties.forEach(p => {
+                    // 빈 파티면 화면에 안 그리기 (전부 공석인 파티)
+                    if (p.dealers.length === 0 && !p.buffer) return;
+
                     const pName = mode === 4 ? '파티' : partyNames[p.partyIndex];
                     const pColor = mode === 4 ? 'dot-red' : partyColors[p.partyIndex];
                     
@@ -558,9 +559,10 @@
                     <div class="party-group">
                         <div class="party-header">
                             ${mode !== 4 ? `<div class="party-dot ${pColor}"></div> <span>${pName}</span>` : '<span>파티</span>'}
-                            <span class="party-summary">4명 | 평균 딜점수 ${formatScore(p.avgDmg.toString(), '딜러')} | 평균 버프점수 ${p.buffer ? formatScore(p.buffer.buff, '버퍼') : '-'}</span>
+                            <span class="party-summary">공팟 포함 평균 딜점수 ${formatScore(p.avgDmg.toString(), '딜러')} | 평균 버프점수 ${p.buffer ? formatScore(p.buffer.buff, '버퍼') : '-'}</span>
                         </div>`;
                     
+                    // 버퍼 출력 (없으면 공석 UI)
                     if (p.buffer) {
                         html += `
                         <div class="formation-row">
@@ -569,8 +571,17 @@
                             <div class="formation-job">${p.buffer.jobClass}</div>
                             <div class="formation-score score-buffer">${formatScore(p.buffer.buff, '버퍼')}</div>
                         </div>`;
+                    } else {
+                        html += `
+                        <div class="formation-row" style="opacity: 0.6; border: 1px dashed #d1d5db; border-radius: 6px; background: #f9fafb; margin-bottom:4px; padding: 6px 10px;">
+                            <div class="formation-role"><span class="role-badge" style="background:#f3f4f6; color:#9ca3af; border:1px solid #d1d5db;">버퍼</span></div>
+                            <div class="formation-name" style="color:#9ca3af; font-size:13px;">[공석] 공팟 구인</div>
+                            <div class="formation-job"></div>
+                            <div class="formation-score">-</div>
+                        </div>`;
                     }
                     
+                    // 딜러 출력
                     p.dealers.forEach(d => {
                         const badgeClass = d.role === '딜러' ? 'role-dealer' : 'role-buffer';
                         const scoreClass = d.role === '딜러' ? 'score-dealer' : 'score-buffer';
@@ -584,6 +595,17 @@
                             <div class="formation-score ${scoreClass}">${displayScore}</div>
                         </div>`;
                     });
+
+                    // 남는 딜러 자리 공석 UI 채우기
+                    for (let emptyIdx = 0; emptyIdx < (3 - p.dealers.length); emptyIdx++) {
+                        html += `
+                        <div class="formation-row" style="opacity: 0.6; border: 1px dashed #d1d5db; border-radius: 6px; background: #f9fafb; margin-bottom:4px; padding: 6px 10px;">
+                            <div class="formation-role"><span class="role-badge" style="background:#f3f4f6; color:#9ca3af; border:1px solid #d1d5db;">딜러</span></div>
+                            <div class="formation-name" style="color:#9ca3af; font-size:13px;">[공석] 공팟 구인</div>
+                            <div class="formation-job"></div>
+                            <div class="formation-score">-</div>
+                        </div>`;
+                    }
 
                     html += `</div>`;
                 });
@@ -636,7 +658,7 @@
             }).join('');
 
             const absentAdvList = advList.filter(a => a.absent > 0).sort((a, b) => b.absent - a.absent);
-            const maxAbsent = absentAdvList.length > 0 ? absentAdvList[0].absent : 1;
+            const maxAbsent = absentAdvList.length > 0 ? absentAdvList.absent : 1;
             
             document.getElementById('absence-chart').innerHTML = absentAdvList.map(a => {
                 const heightPercent = (a.absent / maxAbsent) * 100;
@@ -678,7 +700,7 @@
             });
             const advList = Object.values(advMap).map(a => ({ ...a, avgDmg: a.dCount > 0n ? a.totalDmg / a.dCount : 0n, avgBuff: a.bCount > 0n ? a.totalBuff / a.bCount : 0n })).sort((a, b) => a.avgDmg < b.avgDmg ? 1 : -1);
             if(advList.length > 0) {
-                const strongest = advList[0]; const weakest = advList[advList.length - 1];
+                const strongest = advList; const weakest = advList[advList.length - 1];
                 document.getElementById('box-strongest').querySelector('.adv-name').innerText = strongest.name;
                 document.getElementById('box-strongest').querySelector('.details').innerText = `${strongest.count}캐릭 | 평균 딜점수 ${formatScore(strongest.avgDmg.toString(), '딜러', true)} | 평균 버프점수 ${formatScore(strongest.avgBuff.toString(), '버퍼')}`;
                 document.getElementById('box-weakest').querySelector('.adv-name').innerText = weakest.name;
@@ -687,18 +709,17 @@
 
             const dLimit = globalMembers.filter(m=>m.role==='딜러').sort((a,b)=>parseScore(a.damage)<parseScore(b.damage)?1:-1).slice(0, 10);
             const bLimit = globalMembers.filter(m=>m.role==='버퍼').sort((a,b)=>parseScore(a.buff)<parseScore(b.buff)?1:-1).slice(0, 10);
-            const maxD = parseScore(dLimit[0]?.damage || "1"); const maxB = parseScore(bLimit[0]?.buff || "1");
+            const maxD = parseScore(dLimit?.damage || "1"); const maxB = parseScore(bLimit?.buff || "1");
             
             document.getElementById('dealer-rank-list').innerHTML = dLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.damage,'딜러')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Number(parseScore(m.damage)*100n/maxD)}%"></div></div></div></div>`).join('');
             document.getElementById('buffer-rank-list').innerHTML = bLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.buff,'버퍼')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Number(parseScore(m.buff)*100n/maxB)}%"></div></div></div></div>`).join('');
 
             const jobMap = {}; globalMembers.forEach(m => jobMap[m.jobClass] = (jobMap[m.jobClass] || 0) + 1);
-            const jobList = Object.entries(jobMap).sort((a, b) => b[1] - a[1]);
-            const maxJ = jobList[0] ? jobList[0][1] : 1;
+            const jobList = Object.entries(jobMap).sort((a, b) => b - a);
+            const maxJ = jobList ? jobList : 1;
             document.getElementById('job-chart').innerHTML = jobList.map(([name, count]) => `<div class="job-row"><div class="job-name">${name}</div><div style="flex:1;"><div class="job-bar-fill" style="width:${(count/maxJ)*100}%"></div></div><div style="width:30px; font-size:12px; font-weight:bold; margin-left:10px;">${count}</div></div>`).join('');
         }
 
-        // 🌟 수정: 외부 API 호출 경로를 상대 경로로 변경 (웹 배포용)
         document.getElementById('dundamLink').addEventListener('input', async function(e) {
             const url = e.target.value;
             if (url.includes("dundam.xyz/character?")) {
