@@ -128,6 +128,7 @@
     </div>
 
     <div id="section-manage" class="content-section active">
+        <!-- 요약 카드 영역 -->
         <div class="summary-grid six-cols">
             <div class="summary-card"><div class="summary-label">총 모험단</div><div class="summary-value" id="sum-advs">0</div></div>
             <div class="summary-card"><div class="summary-label">총 캐릭터</div><div class="summary-value" id="sum-chars">0</div></div>
@@ -137,6 +138,7 @@
             <div class="summary-card"><div class="summary-label">평균 버프점수</div><div class="summary-value" id="sum-avg-buff">0</div></div>
         </div>
 
+        <!-- 공대원 추가 폼 -->
         <div class="card">
             <div class="card-title">공대원 추가</div>
             <div class="input-grid">
@@ -150,6 +152,7 @@
             </div>
         </div>
 
+        <!-- 공대원 목록 -->
         <div class="card">
             <div class="card-title">공대원 목록</div>
             <div class="toolbar" style="margin-bottom: 15px;">
@@ -179,6 +182,7 @@
         </div>
     </div>
 
+    <!-- 자동 편성 탭 -->
     <div id="section-formation" class="content-section">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
             <h3 style="margin: 0; font-size: 20px; font-weight: 800; color: #111827;">편성 설정</h3>
@@ -197,6 +201,7 @@
         </div>
     </div>
 
+    <!-- 불참자 확인 탭 -->
     <div id="section-absence" class="content-section">
         <div class="summary-grid" style="margin-bottom: 25px;">
             <div class="summary-card"><div class="summary-label">참석 모험단</div><div class="summary-value attend" id="abs-sum-adv-attend">0</div></div>
@@ -232,6 +237,7 @@
         </div>
     </div>
 
+    <!-- 통계 탭 -->
     <div id="section-stats" class="content-section">
         <div class="stats-top-row">
             <div class="stat-box strong" id="box-strongest">
@@ -396,9 +402,6 @@
             calculateSummary(globalMembers);
         }
 
-        // ==========================================
-        // 🌟 철벽 밸런싱형 압축 기수 자동 편성 (Windowed Allocation)
-        // ==========================================
         function executeAutoFormation() {
             try {
                 const mode = parseInt(document.getElementById('raidMode').value) || 12;
@@ -419,15 +422,12 @@
                 const dealerCapacity = partiesPerSquad * 3;
                 const bufferCapacity = partiesPerSquad;
 
-                // 1. 목표 기수(Full Window) 계산
-                // 딜러 수와 버퍼 수를 고려하여 '완전히 채울 수 있는 기수'를 설정합니다.
                 let targetDealerSquads = Math.floor(effectiveDealers.length / dealerCapacity);
                 if (targetDealerSquads < 1) targetDealerSquads = 1;
 
                 let targetBufferSquads = Math.floor(effectiveBuffers.length / bufferCapacity);
                 if (targetBufferSquads < 1) targetBufferSquads = 1;
 
-                // 초기 기수 세팅
                 const initialSquadCount = Math.max(targetDealerSquads, targetBufferSquads);
                 const squads = [];
                 for (let i = 0; i < initialSquadCount; i++) {
@@ -443,16 +443,11 @@
                     });
                 }
 
-                // 2. 버퍼 밸런싱 분배
                 effectiveBuffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                 for (const b of effectiveBuffers) {
                     let placed = false;
-                    
-                    // 우선적으로 목표 기수(Full Window) 내에서 자리를 찾음
                     let validFull = squads.slice(0, targetBufferSquads).filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
-                    
                     if (validFull.length > 0) {
-                        // 현재 합산 버프력이 가장 낮은 기수에 우선 배정 (밸런스 맞춤)
                         validFull.sort((sqA, sqB) => sqA.bufferSum - sqB.bufferSum);
                         let targetSq = validFull[0];
                         targetSq.buffers.push(b);
@@ -460,17 +455,13 @@
                         targetSq.bufferSum += parseScore(b.buff);
                         placed = true;
                     }
-
-                    // 목표 기수가 꽉 찼거나 모험단 제한에 걸리면 뒤(Overflow)로 넘김
                     if (!placed) {
                         let validOverflow = squads.slice(targetBufferSquads).filter(sq => !sq.roster.has(b.advName) && sq.buffers.length < sq.bufferCapacity);
-                        
                         if (validOverflow.length === 0) {
                             const newSq = { id: squads.length, capacity: dealerCapacity, bufferCapacity: bufferCapacity, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
                             squads.push(newSq);
                             validOverflow = [newSq];
                         }
-                        
                         validOverflow.sort((sqA, sqB) => sqA.bufferSum - sqB.bufferSum);
                         let targetSq = validOverflow[0];
                         targetSq.buffers.push(b);
@@ -479,16 +470,11 @@
                     }
                 }
 
-                // 3. 딜러 밸런싱 분배
                 effectiveDealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                 for (const d of effectiveDealers) {
                     let placed = false;
-                    
-                    // 우선적으로 목표 기수(Full Window) 내에서 자리를 찾음
                     let validFull = squads.slice(0, targetDealerSquads).filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
-                    
                     if (validFull.length > 0) {
-                        // 현재 합산 딜량이 가장 낮은 기수에 우선 배정 (밸런스 맞춤)
                         validFull.sort((sqA, sqB) => sqA.dealerSum - sqB.dealerSum);
                         let targetSq = validFull[0];
                         targetSq.dealers.push(d);
@@ -496,17 +482,13 @@
                         targetSq.dealerSum += parseScore(d.damage);
                         placed = true;
                     }
-
-                    // 목표 기수가 꽉 찼거나 모험단 제한에 걸리면 뒤(Overflow)로 넘김
                     if (!placed) {
                         let validOverflow = squads.slice(targetDealerSquads).filter(sq => !sq.roster.has(d.advName) && sq.dealers.length < sq.capacity);
-                        
                         if (validOverflow.length === 0) {
                             const newSq = { id: squads.length, capacity: dealerCapacity, bufferCapacity: bufferCapacity, dealers: [], buffers: [], roster: new Set(), dealerSum: 0, bufferSum: 0 };
                             squads.push(newSq);
                             validOverflow = [newSq];
                         }
-                        
                         validOverflow.sort((sqA, sqB) => sqA.dealerSum - sqB.dealerSum);
                         let targetSq = validOverflow[0];
                         targetSq.dealers.push(d);
@@ -515,7 +497,6 @@
                     }
                 }
 
-                // 4. 기수 내에서 파티 짜기 (레/옐/그 밸런싱)
                 const parties = [];
                 squads.forEach(sq => {
                     const sqParties = [];
@@ -523,7 +504,6 @@
                         sqParties.push({ squadId: sq.id, partyIndex: i, dealers: [], buffer: null, avgDmg: 0 });
                     }
 
-                    // 파티 밸런스를 맞추기 위해 파티 합산 딜량이 가장 낮은 곳에 딜러 배정
                     sq.dealers.sort((a, b) => parseScore(a.damage) < parseScore(b.damage) ? 1 : -1);
                     for (const d of sq.dealers) {
                         let availableParties = sqParties.filter(p => p.dealers.length < 3);
@@ -532,11 +512,8 @@
                             let sumB = pB.dealers.reduce((acc, x) => acc + parseScore(x.damage), 0);
                             return sumA - sumB; 
                         });
-                        
                         let targetParty = availableParties[0];
-                        if (targetParty) {
-                            targetParty.dealers.push(d);
-                        }
+                        if (targetParty) targetParty.dealers.push(d);
                     }
 
                     sqParties.forEach(p => {
@@ -544,7 +521,6 @@
                         p.avgDmg = sumDmg / 3; 
                     });
 
-                    // 평균 딜량이 높은 파티부터 강한 버퍼 배정
                     sq.buffers.sort((a, b) => parseScore(a.buff) < parseScore(b.buff) ? 1 : -1);
                     sqParties.sort((pA, pB) => pA.avgDmg > pB.avgDmg ? 1 : -1);
 
@@ -553,10 +529,7 @@
                     }
 
                     sqParties.sort((pA, pB) => pA.partyIndex - pB.partyIndex);
-                    
-                    for(let i=0; i<sqParties.length; i++){
-                        parties.push(sqParties[i]);
-                    }
+                    for(let i=0; i<sqParties.length; i++){ parties.push(sqParties[i]); }
                 });
 
                 renderFormationUI(squads, parties, mode);
@@ -577,8 +550,7 @@
                 const sqParties = parties.filter(p => p.squadId === sq.id);
                 if (sqParties.length === 0) return;
 
-                let totalDmgSum = 0; 
-                let totalBuffSum = 0; let validBuffCount = 0;
+                let totalDmgSum = 0; let totalBuffSum = 0; let validBuffCount = 0;
                 
                 sqParties.forEach(p => {
                     p.dealers.forEach(d => { totalDmgSum += parseScore(d.damage); });
@@ -671,27 +643,9 @@
             document.getElementById('absence-chart').innerHTML = absentAdvList.map(a => `<div class="chart-bar-wrap"><div style="font-size:12px; font-weight:bold; color:#ef4444; margin-bottom:5px;">${a.absent}</div><div class="chart-bar" style="height:${(a.absent/maxAbsent)*100}%;"></div><div class="chart-label">${a.name}</div></div>`).join('');
         }
 
-        async function toggleAdvAttendance(advName, isAttendChecked) {
-            const targetStatus = isAttendChecked ? '참석' : '불참';
-            const targetMembers = globalMembers.filter(m => m.advName === advName);
-            targetMembers.forEach(m => m.attendance = targetStatus);
-            renderAbsence(); renderTable();
-            await Promise.all(targetMembers.map(m => fetch(`/api/members/${m.id}/attendance`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attendance: targetStatus }) })));
-        }
-
-        async function toggleAllAbsence(targetStatus) {
-            if(!confirm(`전체 인원을 [${targetStatus}] 처리하시겠습니까?`)) return;
-            globalMembers.forEach(m => m.attendance = targetStatus);
-            renderAbsence(); renderTable();
-            await Promise.all(globalMembers.map(m => fetch(`/api/members/${m.id}/attendance`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attendance: targetStatus }) })));
-        }
-
-        async function togglePassenger(id, isPassenger) { 
-            const nextStatus = !isPassenger;
-            await fetch(`/api/members/${id}/passenger`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isPassenger: nextStatus }) }); 
-            loadMembers(); 
-        }
-
+        // ==========================================
+        // 🌟 수정된 통계 렌더링 함수 (renderStats)
+        // ==========================================
         function getRankDisplay(index) { return index === 0 ? '👑' : (index + 1); }
         
         function renderStats() {
@@ -704,8 +658,11 @@
                 else { advMap[m.advName].totalBuff += parseScore(m.buff); advMap[m.advName].bCount += 1; }
             });
             const advList = Object.values(advMap).map(a => ({ ...a, avgDmg: a.dCount > 0 ? a.totalDmg / a.dCount : 0, avgBuff: a.bCount > 0 ? a.totalBuff / a.bCount : 0 })).sort((a, b) => a.avgDmg < b.avgDmg ? 1 : -1);
+            
             if(advList.length > 0) {
-                const strongest = advList; const weakest = advList[advList.length - 1];
+                // [수정 포인트 1] 배열의 첫 번째 요소를 지정하도록 [0] 추가
+                const strongest = advList[0]; 
+                const weakest = advList[advList.length - 1];
                 document.getElementById('box-strongest').querySelector('.adv-name').innerText = strongest.name;
                 document.getElementById('box-strongest').querySelector('.details').innerText = `${strongest.count}캐릭 | 평균 딜점수 ${formatScore(strongest.avgDmg.toString(), '딜러', true)} | 평균 버프점수 ${formatScore(strongest.avgBuff.toString(), '버퍼')}`;
                 document.getElementById('box-weakest').querySelector('.adv-name').innerText = weakest.name;
@@ -714,17 +671,25 @@
 
             const dLimit = globalMembers.filter(m=>m.role==='딜러').sort((a,b)=>parseScore(a.damage)<parseScore(b.damage)?1:-1).slice(0, 10);
             const bLimit = globalMembers.filter(m=>m.role==='버퍼').sort((a,b)=>parseScore(a.buff)<parseScore(b.buff)?1:-1).slice(0, 10);
-            const maxD = parseScore(dLimit?.damage || "1"); const maxB = parseScore(bLimit?.buff || "1");
             
-            document.getElementById('dealer-rank-list').innerHTML = dLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.damage,'딜러')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${(parseScore(m.damage)*100/(maxD || 1))}%"></div></div></div></div>`).join('');
-            document.getElementById('buffer-rank-list').innerHTML = bLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.buff,'버퍼')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${(parseScore(m.buff)*100/(maxB || 1))}%"></div></div></div></div>`).join('');
+            // [수정 포인트 2] 배열이 비어있지 않을 때 첫 번째 캐릭터의 점수를 기준으로 최대값 설정
+            const maxD = dLimit.length > 0 ? parseScore(dLimit[0].damage) : 1; 
+            const maxB = bLimit.length > 0 ? parseScore(bLimit[0].buff) : 1;
+            
+            document.getElementById('dealer-rank-list').innerHTML = dLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.damage,'딜러')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${(parseScore(m.damage)*100/maxD)}%"></div></div></div></div>`).join('');
+            document.getElementById('buffer-rank-list').innerHTML = bLimit.map((m, i) => `<div class="rank-item"><div class="rank-num-area">${getRankDisplay(i)}</div><div class="rank-content-area"><div class="rank-top-info"><span class="rank-user-text">${m.advName} / ${m.charName}</span><span class="rank-score-text">${formatScore(m.buff,'버퍼')}</span></div><div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${(parseScore(m.buff)*100/maxB)}%"></div></div></div></div>`).join('');
 
             const jobMap = {}; globalMembers.forEach(m => jobMap[m.jobClass] = (jobMap[m.jobClass] || 0) + 1);
-            const jobList = Object.entries(jobMap).sort((a, b) => b - a);
-            const maxJ = jobList ? jobList : 1;
+            
+            // [수정 포인트 3] Object.entries는 배열을 반환하므로 인원수가 들어있는 인덱스 1번(b[1] - a[1])을 기준으로 정렬
+            const jobList = Object.entries(jobMap).sort((a, b) => b[1] - a[1]);
+            
+            // [수정 포인트 4] 직업별 최대 인원수 추출 방식 수정
+            const maxJ = jobList.length > 0 ? jobList[0][1] : 1;
             document.getElementById('job-chart').innerHTML = jobList.map(([name, count]) => `<div class="job-row"><div class="job-name">${name}</div><div style="flex:1;"><div class="job-bar-fill" style="width:${(count/maxJ)*100}%"></div></div><div style="width:30px; font-size:12px; font-weight:bold; margin-left:10px;">${count}</div></div>`).join('');
         }
 
+        // 이벤트 리스너 및 API 연동 영역
         document.getElementById('dundamLink').addEventListener('input', async function(e) {
             const url = e.target.value;
             if (url.includes("dundam.xyz/character?")) {
@@ -747,6 +712,27 @@
             if((await res.json()).success) { loadMembers(); ['advName', 'charName', 'jobClass', 'role', 'dundamLink', 'scoreData'].forEach(id => document.getElementById(id).value = ''); } else alert("이미 등록된 캐릭터입니다.");
         }
 
+        async function toggleAdvAttendance(advName, isAttendChecked) {
+            const targetStatus = isAttendChecked ? '참석' : '불참';
+            const targetMembers = globalMembers.filter(m => m.advName === advName);
+            targetMembers.forEach(m => m.attendance = targetStatus);
+            renderAbsence(); renderTable();
+            await Promise.all(targetMembers.map(m => fetch(`/api/members/${m.id}/attendance`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attendance: targetStatus }) })));
+        }
+
+        async function toggleAllAbsence(targetStatus) {
+            if(!confirm(`전체 인원을 [${targetStatus}] 처리하시겠습니까?`)) return;
+            globalMembers.forEach(m => m.attendance = targetStatus);
+            renderAbsence(); renderTable();
+            await Promise.all(globalMembers.map(m => fetch(`/api/members/${m.id}/attendance`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attendance: targetStatus }) })));
+        }
+
+        async function togglePassenger(id, isPassenger) { 
+            const nextStatus = !isPassenger;
+            await fetch(`/api/members/${id}/passenger`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isPassenger: nextStatus }) }); 
+            loadMembers(); 
+        }
+
         async function updateSingleRow(btn, id, url) { btn.innerText = ".."; const cr = await fetch("/api/get_score", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }); const d = await cr.json(); if (d.success) { await fetch(`/api/members/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ damage: d.damage, buff: d.buff }) }); loadMembers(); } btn.innerText = "갱신"; }
         async function toggleAttendance(id, cur) { const n = cur === '참석' ? '불참' : '참석'; await fetch(`/api/members/${id}/attendance`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attendance: n }) }); loadMembers(); }
         async function deleteRow(id) { if(confirm("삭제?")) { await fetch(`/api/members/${id}`, { method: "DELETE" }); loadMembers(); } }
@@ -767,6 +753,7 @@
         async function deleteAllMembers() { if(confirm("전체 삭제?")) { await fetch("/api/members", { method: "DELETE" }); loadMembers(); } }
         async function toggleGender(id, job) { let base = job.replace("(남)", "").replace("(여)", ""); let next = job.endsWith("(남)") ? base + "(여)" : (job.endsWith("(여)") ? base : base + "(남)"); await fetch(`/api/members/${id}/job`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobClass: next }) }); loadMembers(); }
 
+        // 초기 데이터 로드
         loadMembers();
     </script>
 </body>
